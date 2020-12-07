@@ -6,6 +6,27 @@ import random
 
 _default_state = {
     "maps": {
+        "arena": {
+            "Aquarena",
+            "Authority",
+            "Calico",
+            "Cerberus",
+            "Chasm",
+            "Skyway",
+            "Vertex",
+        },
+        "byo5": {
+            "Brynhildr",
+            "Coral",
+            "Elite",
+            "Exhumed",
+            "Ingonyama",
+            "Kryosis",
+            "Minora",
+            "NightFlare",
+            "Raptor",
+            "TwilightGrove",
+        },
         "ctf": {
             "Authority",
             "BeachBlitz",
@@ -31,17 +52,26 @@ _default_state = {
             "TwilightGrove",
             "Zephyr",
         },
-        "byo5": {
-            "Brynhildr",
-            "Coral",
-            "Elite",
-            "Exhumed",
-            "Ingonyama",
-            "Kryosis",
-            "Minora",
-            "NightFlare",
-            "Raptor",
-            "TwilightGrove",
+        "tdm": {
+            "Authority",
+            "Blitz",
+            "Calypso",
+            "Cerberus",
+            "Crystalline",
+            "Skyway",
+            "Speedway",
+            "Tribulus",
+            "Zephyr",
+        },
+    },
+    "rulesets": {
+        "ctf-byo5": {
+            "pool": "byo5",
+            "order": "ppbbbbbbbr",
+        },
+        "ctf-ladder": {
+            "pool": "ctf",
+            "order": "pppppppp6?",
         },
     },
     "active-pickbans-by-user": {},
@@ -66,13 +96,14 @@ async def maps(ctx: commands.Context, pool=None):
         return
 
     map_list = state["maps"].get(pool)
-    if map_list:
-        await ctx.send(", ".join("`{}`".format(m) for m in sorted(map_list)))
-    else:
+    if not map_list:
         valid_pools = ", ".join("`{}`".format(m) for m in sorted(state["maps"]))
         await ctx.send(
             "No maps found for specified pool. (Valid pools: {})".format(valid_pools)
         )
+        return
+
+    await ctx.send(", ".join("`{}`".format(m) for m in sorted(map_list)))
 
 
 @bot.command()
@@ -96,6 +127,55 @@ async def cancel(ctx: commands.Context):
 
 
 @bot.command()
+async def rulesets(ctx: commands.Context, choice=None):
+    """List the pre-defined rulesets available for picks/bans."""
+    if choice is None:
+        embed = discord.Embed()
+        for ruleset_name, config in state["rulesets"].items():
+            embed.add_field(
+                name="`{}`".format(ruleset_name),
+                value="Map pool: `{}`, order: `{}`".format(
+                    config["pool"], config["order"]
+                ),
+                inline=False,
+            )
+        await ctx.send("Available rulesets:", embed=embed)
+        return
+
+    config = state["rulesets"].get(choice)
+    if not config:
+        valid_rulesets = ", ".join("`{}`".format(r) for r in sorted(state["rulesets"]))
+        await ctx.send(
+            "No ruleset found with the specified name. (Valid rulesets: {})".format(
+                valid_rulesets
+            )
+        )
+        return
+
+    await ctx.send(
+        "Map pool: `{}`, order: `{}`".format(config["pool"], config["order"])
+    )
+
+
+@bot.command()
+async def ruleset(
+    ctx: commands.Context, choice, captain1: discord.Member, captain2: discord.Member
+):
+    """Begin a pick/ban process using a predefined ruleset."""
+    config = state["rulesets"].get(choice)
+    if not config:
+        valid_rulesets = ", ".join("`{}`".format(m) for m in sorted(state["rulesets"]))
+        await ctx.send(
+            "The specified ruleset was not found. (Valid rulesets: {})".format(
+                valid_rulesets
+            )
+        )
+        return
+
+    await pickban(ctx, captain1, captain2, config["pool"], config["order"])
+
+
+@bot.command()
 async def pickban(
     ctx: commands.Context,
     captain1: discord.Member,
@@ -112,9 +192,10 @@ async def pickban(
         generate a sub-pool of that many maps from the named pool.
 
     'order' is specified as a sequence of the following:
-        p:   next captain picks a map from the remaining pool
-        b:   next captain bans a map from the remaining pool
-        r:   randomly pick a map from the remaining pool
+        p: next captain picks a map from the remaining pool
+        b: next captain bans a map from the remaining pool
+        r: randomly pick a map from the remaining pool
+        ~: swap the order of the captains for subsequent picks and bans
 
         Optionally, a digit (1-9) followed by ?s can be added to the end.
         The digit turns that many previous picks into options for a random
@@ -125,7 +206,7 @@ async def pickban(
 
     """
     actives = state["active-pickbans-by-user"]
-    acceptable = tuple("pbr123456789?")
+    acceptable = tuple("pbr123456789?~")
     digits = tuple("123456789")
 
     # Make sure neither captain is already picking
@@ -182,6 +263,7 @@ async def pickban(
         "picks": [],
         "bans": [],
         "order": order,
+        "reverse": False,
     }
     actives[captain1] = actives[captain2] = process
     embed = discord.Embed()
@@ -294,7 +376,7 @@ async def pick_or_ban(ctx: commands.Context, action, choice):
         )
         return
 
-    total_actions = len(process["picks"] + process["bans"])
+    total_actions = len(process["picks"] + process["bans"]) + process["reverse"]
     next_captain = process["captains"][total_actions % 2]
     next_action = process["order"][total_actions]
 
@@ -335,7 +417,7 @@ async def pick_or_ban(ctx: commands.Context, action, choice):
 async def check_next(ctx: commands.Context, process):
     """Check for potential automated action in a pick/ban process and output status."""
     actives = state["active-pickbans-by-user"]
-    total_actions = len(process["picks"] + process["bans"])
+    total_actions = len(process["picks"] + process["bans"]) + process["reverse"]
 
     # Complete?
     if total_actions >= len(process["order"]):
@@ -418,6 +500,9 @@ async def check_next(ctx: commands.Context, process):
                 ", ".join("`{}`".format(m) for m in auto_selections)
             )
         )
+    # Swap
+    if next_action == "~":
+        process["reverse"] = not process["reverse"]
 
     await check_next(ctx, process)
 
