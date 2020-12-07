@@ -263,7 +263,7 @@ async def pickban(
         "picks": [],
         "bans": [],
         "order": order,
-        "reverse": False,
+        "reversals": 0,
     }
     actives[captain1] = actives[captain2] = process
     embed = discord.Embed()
@@ -376,7 +376,7 @@ async def pick_or_ban(ctx: commands.Context, action, choice):
         )
         return
 
-    total_actions = len(process["picks"] + process["bans"]) + process["reverse"]
+    total_actions = len(process["picks"] + process["bans"]) + process["reversals"]
     next_captain = process["captains"][total_actions % 2]
     next_action = process["order"][total_actions]
 
@@ -417,7 +417,7 @@ async def pick_or_ban(ctx: commands.Context, action, choice):
 async def check_next(ctx: commands.Context, process):
     """Check for potential automated action in a pick/ban process and output status."""
     actives = state["active-pickbans-by-user"]
-    total_actions = len(process["picks"] + process["bans"]) + process["reverse"]
+    total_actions = len(process["picks"] + process["bans"]) + process["reversals"]
 
     # Complete?
     if total_actions >= len(process["order"]):
@@ -479,16 +479,30 @@ async def check_next(ctx: commands.Context, process):
 
     # Pick
     if next_action == "p":
+        if not process["pool"]:
+            await ctx.send("Unable to continue: ran out of maps in the pool.")
+            await cancel(ctx)
+            return
         await ctx.send("{}, it's your turn to pick.".format(next_captain.mention))
         return
     # Ban
     if next_action == "b":
+        if not process["pool"]:
+            await ctx.send("Unable to continue: ran out of maps in the pool.")
+            await cancel(ctx)
+            return
         await ctx.send("{}, it's your turn to ban.".format(next_captain.mention))
         return
     # Random
     if next_action == "r":
         auto_selections = []
         while next_action == "r":
+            if not process["pool"]:
+                await ctx.send(
+                    "Failed to automatically select a map: no maps remaining in pool."
+                )
+                await cancel(ctx)
+                return
             choice = random.choice(list(process["pool"]))
             process["pool"].remove(choice)
             process["picks"].append(choice)
@@ -502,7 +516,7 @@ async def check_next(ctx: commands.Context, process):
         )
     # Swap
     if next_action == "~":
-        process["reverse"] = not process["reverse"]
+        process["reversals"] += 1
 
     await check_next(ctx, process)
 
