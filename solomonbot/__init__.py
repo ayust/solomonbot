@@ -52,6 +52,21 @@ _default_state = {
             "TwilightGrove",
             "Zephyr",
         },
+        "ctf-ladder": {
+            "Brynhildr",
+            "Coral",
+            "Elite",
+            "Exhumed",
+            "Ingonyama",
+            "Kryosis",
+            "Minora",
+            "NightFlare",
+            "Outpost",
+            "Raptor",
+            "RiftValley",
+            "Trailblazer",
+            "TwilightGrove",
+        },
         "tdm": {
             "Authority",
             "Blitz",
@@ -67,10 +82,10 @@ _default_state = {
     "rulesets": {
         "ctf-byo5": {
             "pool": "byo5",
-            "order": "ppbbbbbbbr",
+            "order": "~pp~bbbbbbbr",
         },
         "ctf-ladder": {
-            "pool": "ctf",
+            "pool": "ctf-ladder",
             "order": "pppppppp6?",
         },
     },
