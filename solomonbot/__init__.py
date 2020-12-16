@@ -88,6 +88,10 @@ _default_state = {
             "pool": "ctf-ladder",
             "order": "pppppppp6?",
         },
+        "ctf-ladder-bans": {
+            "pool": "ctf-ladder",
+            "order": "bbbbpppppppp6?",
+        },
     },
     "active-pickbans-by-user": {},
 }
