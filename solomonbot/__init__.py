@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 import itertools
 import random
+import sqlite3
 
 _default_state = {
     "maps": {
@@ -96,6 +97,9 @@ _default_state = {
     "active-pickbans-by-user": {},
 }
 state = deepcopy(_default_state)
+
+db = sqlite3.connect("solomonbot.sqlite3")
+db.row_factory = sqlite3.Row
 
 bot = commands.Bot(command_prefix="$")
 
@@ -538,6 +542,202 @@ async def check_next(ctx: commands.Context, process):
         process["reversals"] += 1
 
     await check_next(ctx, process)
+
+
+@bot.command(hidden=True)
+async def signup(ctx: commands.Context):
+    """Sign up for a draft tournament."""
+
+    if get_setting("signups") != "on":
+        await ctx.send("Signups are not currently enabled.")
+        return
+
+    c = db.cursor()
+    u = ctx.author
+
+    signedup = c.execute(
+        "SELECT mention FROM signups WHERE mention = ?;", (u.mention,)
+    ).fetchone()
+    if signedup:
+        await ctx.send("You're already signed up, {}.".format(u.mention))
+        return
+
+    c.execute(
+        "INSERT INTO signups (mention, display_name) VALUES (?, ?);",
+        (u.mention, u.display_name),
+    )
+    db.commit()
+    signups = c.execute("SELECT COUNT(1) AS total FROM signups;").fetchone()
+    await ctx.send(
+        "{} is now signed up (#{}, {}).".format(
+            u.mention, signups["total"], u.display_name
+        )
+    )
+
+
+@bot.command(hidden=True)
+async def withdraw(ctx: commands.Context):
+    """Withdraw from a draft tournament."""
+
+    if get_setting("signups") != "on":
+        await ctx.send("Signups are not currently enabled.")
+        return
+
+    c = db.cursor()
+    u = ctx.author
+
+    signedup = c.execute(
+        "SELECT mention FROM signups WHERE mention = ?;", (u.mention,)
+    ).fetchone()
+    if not signedup:
+        await ctx.send("You're not signed up, {}.".format(u.mention))
+        return
+
+    c.execute("DELETE FROM signups WHERE mention = ?;", (u.mention,))
+    db.commit()
+    await ctx.send("Your signup has been withdrawn, {}.".format(u.mention))
+
+
+@bot.command(hidden=True)
+async def checkin(ctx: commands.Context):
+    """Check in for a draft tournament."""
+
+    if get_setting("checkins") != "on":
+        await ctx.send("Checkins are not currently enabled.")
+        return
+
+    c = db.cursor()
+    u = ctx.author
+
+    signedup = c.execute(
+        "SELECT mention, checkin_time FROM signups WHERE mention = ?;", (u.mention,)
+    ).fetchone()
+    if not signedup:
+        await ctx.send("You're not signed up, {}.".format(u.mention))
+        return
+    if signedup["checkin_time"]:
+        await ctx.send("You're already checked in, {}.".format(u.mention))
+        return
+
+    c.execute(
+        "UPDATE signups SET checkin_time = CURRENT_TIMESTAMP WHERE mention = ?;",
+        (u.mention,),
+    )
+    db.commit()
+    checkins = c.execute(
+        "SELECT COUNT(1) AS total FROM signups WHERE checkin_time IS NOT NULL;"
+    ).fetchone()
+    await ctx.send(
+        "{} has checked in (#{}, {}).".format(
+            u.mention, checkins["total"], u.display_name
+        )
+    )
+
+
+@bot.command(hidden=True)
+async def signups(ctx: commands.Context):
+    """List the currently signed up players for a draft tournament."""
+    c = db.cursor()
+
+    signedup = c.execute(
+        "SELECT display_name FROM signups ORDER BY signup_time ASC;"
+    ).fetchall()
+    if not signedup:
+        await ctx.send("No players signed up.")
+        return
+
+    embed = player_list_embed(signedup)
+    await ctx.send("{} players signed up.".format(len(signedup)), embed=embed)
+
+
+@bot.command(hidden=True)
+async def checkins(ctx: commands.Context):
+    """List the currently checked in players for a draft tournament."""
+    c = db.cursor()
+
+    checkedin = c.execute(
+        "SELECT display_name FROM signups WHERE checkin_time IS NOT NULL ORDER BY checkin_time ASC;"
+    ).fetchall()
+    if not checkedin:
+        await ctx.send("No players checked in.")
+        return
+
+    embed = player_list_embed(checkedin)
+    await ctx.send("{} players checked in.".format(len(checkedin)), embed=embed)
+
+
+def player_list_embed(player_list, group_size=20):
+    """Generates a discord embed that lists a set of players, grouped into fields."""
+    embed = discord.Embed()
+    group_count = (len(player_list) - 1) // group_size
+    for g in range(group_count + 1):
+        start = g * group_size
+        end = (g + 1) * group_size
+        players = player_list[start:end]
+        range_label = "{}-{}:".format(start + 1, start + len(players))
+        player_list = "\n".join(p["display_name"] for p in players)
+        embed.add_field(name=range_label, value=player_list)
+    return embed
+
+
+@bot.command(hidden=True)
+@commands.is_owner()
+async def setting(ctx: commands.Context, name: str, data: str):
+    set_setting(name, data)
+    await ctx.send("Set `{}` to `{}`.".format(name, data))
+
+
+@bot.command(hidden=True)
+@commands.is_owner()
+async def enable(ctx: commands.Context, name: str):
+    await setting(ctx, name, "on")
+
+
+@bot.command(hidden=True)
+@commands.is_owner()
+async def disable(ctx: commands.Context, name: str):
+    await setting(ctx, name, "off")
+
+
+def get_setting(name):
+    c = db.cursor()
+    result = c.execute("SELECT data FROM settings WHERE name = ?;", (name,)).fetchone()
+    if not result:
+        return None
+    return result["data"]
+
+
+def set_setting(name, data):
+    c = db.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO settings (name, data) VALUES (?, ?);", (name, data)
+    )
+    db.commit()
+
+
+@bot.command(hidden=True)
+@commands.is_owner()
+async def dbwipe(ctx: commands.Context):
+    """Reset the database of persistent state."""
+    c = db.cursor()
+    c.executescript(
+        """
+        DROP TABLE IF EXISTS settings;
+        CREATE TABLE settings (
+            name TEXT PRIMARY KEY,
+            data TEXT NOT NULL
+        );
+        
+        DROP TABLE IF EXISTS signups;
+        CREATE TABLE signups (
+            mention TEXT PRIMARY KEY,
+            display_name TEXT,
+            signup_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            checkin_time TIMESTAMP DEFAULT NULL
+        );
+    """
+    )
+    db.commit()
 
 
 @bot.command(hidden=True)
