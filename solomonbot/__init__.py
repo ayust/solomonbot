@@ -1,7 +1,6 @@
 from copy import deepcopy
 import discord
 from discord.ext import commands
-import itertools
 import random
 import sqlite3
 
