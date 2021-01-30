@@ -544,7 +544,7 @@ async def check_next(ctx: commands.Context, process):
     await check_next(ctx, process)
 
 
-@bot.command(hidden=True)
+@bot.command()
 async def signup(ctx: commands.Context):
     """Sign up for a draft tournament."""
 
@@ -575,7 +575,7 @@ async def signup(ctx: commands.Context):
     )
 
 
-@bot.command(hidden=True)
+@bot.command()
 async def withdraw(ctx: commands.Context):
     """Withdraw from a draft tournament."""
 
@@ -598,7 +598,7 @@ async def withdraw(ctx: commands.Context):
     await ctx.send("Your signup has been withdrawn, {}.".format(u.mention))
 
 
-@bot.command(hidden=True)
+@bot.command()
 async def checkin(ctx: commands.Context):
     """Check in for a draft tournament."""
 
@@ -634,7 +634,7 @@ async def checkin(ctx: commands.Context):
     )
 
 
-@bot.command(hidden=True)
+@bot.command()
 async def signups(ctx: commands.Context):
     """List the currently signed up players for a draft tournament."""
     c = db.cursor()
@@ -650,7 +650,7 @@ async def signups(ctx: commands.Context):
     await ctx.send("{} players signed up.".format(len(signedup)), embed=embed)
 
 
-@bot.command(hidden=True)
+@bot.command()
 async def checkins(ctx: commands.Context):
     """List the currently checked in players for a draft tournament."""
     c = db.cursor()
