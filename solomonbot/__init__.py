@@ -674,8 +674,8 @@ def player_list_embed(player_list, group_size=20):
         end = (g + 1) * group_size
         players = player_list[start:end]
         range_label = "{}-{}:".format(start + 1, start + len(players))
-        player_list = "\n".join(p["display_name"] for p in players)
-        embed.add_field(name=range_label, value=player_list)
+        player_text = "\n".join(p["display_name"] for p in players)
+        embed.add_field(name=range_label, value=player_text)
     return embed
 
 
