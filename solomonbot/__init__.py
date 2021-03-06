@@ -715,6 +715,13 @@ def set_setting(name, data):
 
 
 @bot.command(hidden=True)
+async def whoami(ctx: commands.Context):
+    """Respond with the Discord API ID of the invoker."""
+    u = ctx.author
+    await ctx.send("{} you are {} = `{}`".format(u.mention, u.display_name, u.mention))
+
+
+@bot.command(hidden=True)
 @commands.is_owner()
 async def dbwipe(ctx: commands.Context):
     """Reset the database of persistent state."""
