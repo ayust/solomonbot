@@ -609,7 +609,8 @@ async def checkin(ctx: commands.Context):
     u = ctx.author
 
     signedup = c.execute(
-        "SELECT mention, checkin_time FROM signups WHERE mention = ?;", (u.mention,)
+        "SELECT mention, checkin_time FROM signups WHERE mention = ? OR mention = ?;",
+        (u.mention, u.mention.replace("@!", "@")),
     ).fetchone()
     if not signedup:
         await ctx.send("You're not signed up, {}.".format(u.mention))
@@ -619,8 +620,8 @@ async def checkin(ctx: commands.Context):
         return
 
     c.execute(
-        "UPDATE signups SET checkin_time = CURRENT_TIMESTAMP WHERE mention = ?;",
-        (u.mention,),
+        "UPDATE signups SET checkin_time = CURRENT_TIMESTAMP WHERE mention = ? OR mention = ?;",
+        (u.mention, u.mention.replace("@!", "@")),
     )
     db.commit()
     checkins = c.execute(
